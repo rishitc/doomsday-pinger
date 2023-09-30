@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 
 	"github.com/BurntSushi/toml"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 )
 
 const cmdLineIndexPingTargetsFileName = 1
@@ -26,7 +29,7 @@ func main() {
 		logger.Error("Unable to open file", fileName, err)
 	}
 	for _, target := range targets {
-		if ok := ping(target); !ok {
+		if ok := ping(logger, target); !ok {
 			logger.Error(fmt.Sprintf("Ping failed for %s", target))
 		} else {
 			logger.Info(fmt.Sprintf("Ping succeeded for %s", target))
@@ -53,6 +56,47 @@ func parse(data string) ([]string, error) {
 	return conf.IPs, nil
 }
 
-func ping(target string) bool {
+func ping(logger *slog.Logger, target string) bool {
+	c, err := icmp.ListenPacket("udp4", "")
+	if err != nil {
+		logger.Error(err.Error())
+		return false
+	}
+	defer c.Close()
+
+	wm := icmp.Message{
+		Type: ipv4.ICMPTypeEcho,
+		Code: 0,
+		Body: &icmp.Echo{
+			ID: os.Getpid() & 0xffff, Seq: 1,
+			Data: []byte("HELLO-R-U-THERE"),
+		},
+	}
+	wb, err := wm.Marshal(nil)
+	if err != nil {
+		logger.Error(err.Error())
+	}
+	if _, err := c.WriteTo(wb, &net.UDPAddr{IP: net.ParseIP(target), Port: 80}); err != nil {
+		logger.Error(err.Error(), "location", "writeto")
+	}
+
+	rb := make([]byte, 1500)
+	n, peer, err := c.ReadFrom(rb)
+	if err != nil {
+		logger.Error(err.Error())
+	}
+	rm, err := icmp.ParseMessage(58, rb[:n])
+	if err != nil {
+		logger.Error(err.Error())
+	}
+	switch rm.Type {
+	case ipv4.ICMPTypeEchoReply:
+		logger.Info(fmt.Sprintf("got reflection from %v", peer))
+	default:
+		logger.Info(fmt.Sprintf("got %+v; want echo reply", rm))
+		b, _ := rm.Body.Marshal(4)
+		logger.Info(string(b[4:]))
+
+	}
 	return true
 }
