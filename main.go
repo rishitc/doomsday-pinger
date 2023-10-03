@@ -56,6 +56,8 @@ func parse(data string) ([]string, error) {
 	return conf.IPs, nil
 }
 
+var pingPayload = []byte("HELLO-R-U-THERE")
+
 const location = "location"
 
 func ping(logger *slog.Logger, target string) bool {
@@ -72,7 +74,7 @@ func ping(logger *slog.Logger, target string) bool {
 		Code: 0,
 		Body: &icmp.Echo{
 			ID: os.Getpid() & 0xffff, Seq: 1,
-			Data: []byte("HELLO-R-U-THERE"),
+			Data: pingPayload,
 		},
 	}
 	wb, err := wm.Marshal(nil)
