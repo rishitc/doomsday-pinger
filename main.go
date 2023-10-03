@@ -56,10 +56,13 @@ func parse(data string) ([]string, error) {
 	return conf.IPs, nil
 }
 
+const location = "location"
+
 func ping(logger *slog.Logger, target string) bool {
+	const logPrefix = "ping"
 	c, err := icmp.ListenPacket("udp4", "")
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(err.Error(), slog.String(location, logPrefix))
 		return false
 	}
 	defer c.Close()
@@ -74,26 +77,26 @@ func ping(logger *slog.Logger, target string) bool {
 	}
 	wb, err := wm.Marshal(nil)
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(err.Error(), slog.String(location, logPrefix))
 	}
 	if _, err := c.WriteTo(wb, &net.UDPAddr{IP: net.ParseIP(target), Port: 80}); err != nil {
-		logger.Error(err.Error(), "location", "writeto")
+		logger.Error(err.Error(), slog.String(location, logPrefix))
 	}
 
 	rb := make([]byte, 1500)
 	n, peer, err := c.ReadFrom(rb)
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(err.Error(), slog.String(location, logPrefix))
 	}
 	rm, err := icmp.ParseMessage(58, rb[:n])
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error(err.Error(), slog.String(location, logPrefix))
 	}
 	switch rm.Type {
 	case ipv4.ICMPTypeEchoReply:
-		logger.Info(fmt.Sprintf("got reflection from %v", peer))
+		logger.Info(fmt.Sprintf("got reflection from %v", peer), slog.String(location, logPrefix))
 	default:
-		logger.Info(fmt.Sprintf("got %+v; want echo reply", rm))
+		logger.Info(fmt.Sprintf("got %+v; want echo reply", rm), slog.String(location, logPrefix))
 		b, _ := rm.Body.Marshal(4)
 		logger.Info(string(b[4:]))
 
